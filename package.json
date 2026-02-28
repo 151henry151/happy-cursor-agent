@@ -1,0 +1,29 @@
+{
+    "name": "happy-cursor-agent",
+    "private": true,
+    "scripts": {
+        "cli": "yarn workspace happy-cursor-coder cli",
+        "release": "node ./scripts/release.cjs",
+        "web": "yarn workspace happy-app web",
+        "postinstall": "node ./scripts/postinstall.cjs"
+    },
+    "workspaces": {
+        "packages": [
+            "packages/happy-app",
+            "packages/happy-agent",
+            "packages/happy-cli",
+            "packages/happy-server",
+            "packages/happy-wire"
+        ],
+        "nohoist": [
+            "**/zod",
+            "**/react",
+            "**/react-dom",
+            "**/react-native",
+            "**/react-native/**",
+            "**/react-native-edge-to-edge/**",
+            "**/react-native-incall-manager/**"
+        ]
+    },
+    "packageManager": "yarn@1.22.22"
+}
