@@ -168,13 +168,13 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     const { messages, isLoaded } = useSessionMessages(sessionId);
     const acknowledgedCliVersions = useLocalSetting('acknowledgedCliVersions');
 
-    // Check if CLI version is outdated and not already acknowledged
+    // Check if CLI version is outdated and not already acknowledged (never show for Cursor sessions in this fork)
+    const flavor = session.metadata?.flavor;
     const cliVersion = session.metadata?.version;
     const machineId = session.metadata?.machineId;
     const isCliOutdated = cliVersion && !isVersionSupported(cliVersion, MINIMUM_CLI_VERSION);
     const isAcknowledged = machineId && acknowledgedCliVersions[machineId] === cliVersion;
-    const shouldShowCliWarning = isCliOutdated && !isAcknowledged;
-    const flavor = session.metadata?.flavor;
+    const shouldShowCliWarning = flavor !== 'cursor' && isCliOutdated && !isAcknowledged;
     const availableModels = React.useMemo(() => (
         getAvailableModels(flavor, session.metadata, t)
     ), [flavor, session.metadata]);
@@ -297,6 +297,9 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         </>
     ) : null;
 
+    // Show agent type in session view (e.g. "Cursor") from session metadata; no-op click since type is fixed for the session
+    const agentTypeForDisplay = (flavor === 'cursor' || flavor === 'claude' || flavor === 'codex' || flavor === 'gemini') ? flavor : undefined;
+
     const input = (
         <AgentInput
             placeholder={t('session.inputPlaceholder')}
@@ -310,6 +313,8 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             availableModels={availableModels}
             onModelModeChange={updateModelMode}
             metadata={session.metadata}
+            agentType={agentTypeForDisplay}
+            onAgentClick={() => {}}
             connectionStatus={{
                 text: sessionStatus.statusText,
                 color: sessionStatus.statusColor,

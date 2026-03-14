@@ -100,6 +100,10 @@ export function getHardcodedPermissionModes(flavor: AgentFlavor, translate: Tran
     if (flavor === 'gemini') {
         return getGeminiPermissionModes(translate);
     }
+    // cursor uses same permission modes as claude
+    if (flavor === 'cursor') {
+        return getClaudePermissionModes(translate);
+    }
     return getClaudePermissionModes(translate);
 }
 
@@ -109,6 +113,10 @@ export function getHardcodedModelModes(flavor: AgentFlavor, translate: Translate
     }
     if (flavor === 'gemini') {
         return getGeminiModelModes();
+    }
+    // cursor uses same model modes as claude (Default, etc.)
+    if (flavor === 'cursor') {
+        return getClaudeModelModes();
     }
     return getClaudeModelModes();
 }
@@ -130,7 +138,7 @@ export function getAvailablePermissionModes(
     metadata: Metadata | null | undefined,
     translate: Translate,
 ): PermissionMode[] {
-    if (flavor === 'claude' || flavor === 'codex') {
+    if (flavor === 'claude' || flavor === 'codex' || flavor === 'cursor') {
         return hackModes(getHardcodedPermissionModes(flavor, translate));
     }
 
@@ -169,6 +177,7 @@ export function getDefaultModelKey(flavor: AgentFlavor): string {
     if (flavor === 'gemini') {
         return 'gemini-2.5-pro';
     }
+    // cursor and claude use default
     return 'default';
 }
 

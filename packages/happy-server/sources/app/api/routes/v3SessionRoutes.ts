@@ -2,6 +2,7 @@ import { buildNewMessageUpdate, eventRouter } from "@/app/events/eventRouter";
 import { db } from "@/storage/db";
 import { allocateSessionSeqBatch, allocateUserSeq } from "@/storage/seq";
 import { randomKeyNaked } from "@/utils/randomKeyNaked";
+import { log, warn } from "@/utils/log";
 import { z } from "zod";
 import { type Fastify } from "../types";
 
@@ -112,6 +113,8 @@ export function v3SessionRoutes(app: Fastify) {
         const { sessionId } = request.params;
         const { messages } = request.body;
 
+        log({ module: 'v3session' }, `POST /v3/sessions/${sessionId}/messages received`, { userId, messageCount: messages?.length });
+
         const session = await db.session.findFirst({
             where: {
                 id: sessionId,
@@ -121,6 +124,19 @@ export function v3SessionRoutes(app: Fastify) {
         });
 
         if (!session) {
+            const existsWithOtherOwner = await db.session.findFirst({
+                where: { id: sessionId },
+                select: { accountId: true }
+            });
+            if (existsWithOtherOwner) {
+                warn({ module: 'v3session' }, `POST messages 404: session ${sessionId} exists but accountId ${existsWithOtherOwner.accountId} !== request userId ${userId} (wrong account)`);
+                return reply.code(404).send({
+                    error: 'Session not found',
+                    code: 'SESSION_OWNER_MISMATCH',
+                    message: 'This session belongs to a different account. Log in to the web app with the same account you used when you ran "happy auth login" and linked this machine.'
+                });
+            }
+            warn({ module: 'v3session' }, `POST messages 404: no session ${sessionId} for userId ${userId}`);
             return reply.code(404).send({ error: 'Session not found' });
         }
 

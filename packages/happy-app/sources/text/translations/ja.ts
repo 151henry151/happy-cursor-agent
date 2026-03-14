@@ -436,6 +436,7 @@ export const ja: TranslationStructure = {
             claude: 'Claude',
             codex: 'Codex',
             gemini: 'Gemini',
+            cursor: 'Cursor',
         },
         model: {
             title: 'モデル',

@@ -1555,7 +1555,21 @@ class Sync {
                 signal: controller.signal
             });
             if (!response.ok) {
-                throw new Error(`Failed to send messages for ${sessionId}: ${response.status}`);
+                let serverMessage: string | undefined;
+                try {
+                    const errBody = await response.json() as { code?: string; message?: string; error?: string };
+                    serverMessage = errBody.message ?? errBody.error;
+                } catch {
+                    // response body was not JSON
+                }
+                // Stop retrying this session on 404 (e.g. session belongs to another account or was deleted)
+                if (response.status === 404) {
+                    pending.splice(0, batch.length);
+                    if (pending.length === 0) {
+                        this.pendingOutbox.delete(sessionId);
+                    }
+                }
+                throw new Error(serverMessage ?? `Failed to send messages for ${sessionId}: ${response.status}`);
             }
 
             const data = await response.json() as V3PostSessionMessagesResponse;

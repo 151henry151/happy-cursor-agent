@@ -36,9 +36,13 @@ export const initialMachineMetadata: MachineMetadata = {
 // Get environment variables for a profile, filtered for agent compatibility
 async function getProfileEnvironmentVariablesForAgent(
   profileId: string,
-  agentType: 'claude' | 'codex' | 'gemini'
+  agentType: 'claude' | 'codex' | 'gemini' | 'cursor'
 ): Promise<Record<string, string>> {
   try {
+    // Cursor Agent uses its own auth (no profile env vars)
+    if (agentType === 'cursor') {
+      return {};
+    }
     const settings = await readSettings();
     const profile = settings.profiles.find(p => p.id === profileId);
 
@@ -285,6 +289,10 @@ export async function startDaemon(): Promise<void> {
 
             // Set the environment variable for Codex
             authEnv.CODEX_HOME = codexHomeDir.name;
+          } else if (options.agent === 'cursor' && options.secret) {
+            // Cursor: pass web app user credentials so the child creates the session under the same account
+            authEnv.HAPPY_SESSION_TOKEN = options.token;
+            authEnv.HAPPY_SESSION_SECRET = options.secret;
           } else { // Assuming claude
             authEnv.CLAUDE_CODE_OAUTH_TOKEN = options.token;
           }
@@ -387,7 +395,8 @@ export async function startDaemon(): Promise<void> {
           // Construct command for the CLI
           const cliPath = join(projectPath(), 'dist', 'index.mjs');
           // Determine agent command - support claude, codex, and gemini
-          const agent = options.agent === 'gemini' ? 'gemini' : (options.agent === 'codex' ? 'codex' : 'claude');
+          const normalizedAgent = typeof options.agent === 'string' ? options.agent.toLowerCase() : undefined;
+          const agent = normalizedAgent === 'cursor' ? 'cursor' : (normalizedAgent === 'gemini' ? 'gemini' : (normalizedAgent === 'codex' ? 'codex' : 'claude'));
           const fullCommand = `node --no-warnings --no-deprecation ${cliPath} ${agent} --happy-starting-mode remote --started-by daemon`;
 
           // Spawn in tmux with environment variables
@@ -470,9 +479,15 @@ export async function startDaemon(): Promise<void> {
         if (!useTmux) {
           logger.debug(`[DAEMON RUN] Using regular process spawning`);
 
-          // Construct arguments for the CLI - support claude, codex, and gemini
+          // Normalize agent type (wire may send 'Cursor' or 'cursor')
+          const agentType = typeof options.agent === 'string' ? options.agent.toLowerCase() : undefined;
+
+          // Construct arguments for the CLI - support cursor, claude, codex, and gemini
           let agentCommand: string;
-          switch (options.agent) {
+          switch (agentType) {
+            case 'cursor':
+              agentCommand = 'cursor';
+              break;
             case 'claude':
             case undefined:
               agentCommand = 'claude';

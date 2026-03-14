@@ -14,6 +14,7 @@ import { trackAccountCreated, trackAccountRestored } from '@/track';
 import { HomeHeaderNotAuth } from "@/components/HomeHeader";
 import { MainView } from "@/components/MainView";
 import { t } from '@/text';
+import { Modal } from '@/modal';
 
 export default function Home() {
     const auth = useAuth();
@@ -46,6 +47,7 @@ function NotAuthenticated() {
             }
         } catch (error) {
             console.error('Error creating account', error);
+            Modal.alert(t('common.error'), t('errors.authenticationFailed') + ' The server may be unreachable.');
         }
     }
 

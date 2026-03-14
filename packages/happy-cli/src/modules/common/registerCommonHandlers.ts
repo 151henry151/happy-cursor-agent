@@ -120,8 +120,10 @@ export interface SpawnSessionOptions {
     directory: string;
     sessionId?: string;
     approvedNewDirectoryCreation?: boolean;
-    agent?: 'claude' | 'codex' | 'gemini';
+    agent?: 'claude' | 'codex' | 'gemini' | 'cursor';
     token?: string;
+    /** Web app user secret (legacy encryption key) so spawned Cursor session is created under same account */
+    secret?: string;
     environmentVariables?: {
         // Anthropic Claude API configuration
         ANTHROPIC_BASE_URL?: string;        // Custom API endpoint (overrides default)

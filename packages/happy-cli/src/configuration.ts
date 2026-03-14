@@ -30,7 +30,10 @@ class Configuration {
   constructor() {
     // Server configuration - priority: parameter > environment > default
     this.serverUrl = process.env.HAPPY_SERVER_URL || 'https://api.cluster-fluster.com'
-    this.webappUrl = process.env.HAPPY_WEBAPP_URL || 'https://app.happy.engineering'
+    // When using a custom server (e.g. self-hosted), use it for the webapp too unless HAPPY_WEBAPP_URL is set
+    this.webappUrl = process.env.HAPPY_WEBAPP_URL || (
+      process.env.HAPPY_SERVER_URL ? process.env.HAPPY_SERVER_URL : 'https://app.happy.engineering'
+    )
 
     // Check if we're running as daemon based on process args
     const args = process.argv.slice(2)

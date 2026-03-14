@@ -414,6 +414,7 @@ export const ru: TranslationStructure = {
             claude: 'Claude',
             codex: 'Codex',
             gemini: 'Gemini',
+            cursor: 'Cursor',
         },
         model: {
             title: 'МОДЕЛЬ',

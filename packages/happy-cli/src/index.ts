@@ -30,6 +30,8 @@ import { spawnHappyCLI } from './utils/spawnHappyCLI'
 import { claudeCliPath } from './claude/claudeLocal'
 import { execFileSync } from 'node:child_process'
 import { extractNoSandboxFlag } from './utils/sandboxFlags'
+import { decodeBase64 } from './api/encryption'
+import type { Credentials } from './persistence'
 
 
 (async () => {
@@ -156,19 +158,47 @@ import { extractNoSandboxFlag } from './utils/sandboxFlags'
         }
       }
 
-      const { credentials } = await authAndSetupMachineIfNeeded();
+      // When daemon spawns with web app credentials, use them so the session is created under the web user's account
+      let credentials: Credentials;
+      const sessionToken = process.env.HAPPY_SESSION_TOKEN;
+      const sessionSecret = process.env.HAPPY_SESSION_SECRET;
+      if (sessionToken && sessionSecret) {
+        try {
+          // Web app typically sends secret as base64url; try base64 if that fails
+          let secretBytes: Uint8Array;
+          try {
+            secretBytes = decodeBase64(sessionSecret, 'base64url');
+          } catch {
+            secretBytes = decodeBase64(sessionSecret, 'base64');
+          }
+          credentials = {
+            token: sessionToken,
+            encryption: { type: 'legacy', secret: secretBytes },
+          };
+          logger.debug('[CURSOR] Using credentials from HAPPY_SESSION_* (web app user)');
+        } catch (e) {
+          logger.debug('[CURSOR] Failed to parse HAPPY_SESSION_SECRET, falling back to local credentials', e);
+          const auth = await authAndSetupMachineIfNeeded();
+          credentials = auth.credentials;
+        }
+      } else {
+        const auth = await authAndSetupMachineIfNeeded();
+        credentials = auth.credentials;
+      }
 
-      // Auto-start daemon
-      logger.debug('Ensuring Happy background service is running & matches our version...');
-      if (!(await isDaemonRunningCurrentlyInstalledHappyVersion())) {
-        logger.debug('Starting Happy background service...');
-        const daemonProcess = spawnHappyCLI(['daemon', 'start-sync'], {
-          detached: true,
-          stdio: 'ignore',
-          env: process.env,
-        });
-        daemonProcess.unref();
-        await new Promise(resolve => setTimeout(resolve, 200));
+      // Auto-start daemon only when not started by daemon (no session env = we are the interactive CLI)
+      if (!sessionToken) {
+        logger.debug('Ensuring Happy background service is running & matches our version...');
+        if (!(await isDaemonRunningCurrentlyInstalledHappyVersion())) {
+          logger.debug('Starting Happy background service...');
+          const daemonProcess = spawnHappyCLI(['daemon', 'start-sync'], {
+            detached: true,
+            stdio: 'ignore',
+            env: process.env,
+          });
+          daemonProcess.unref();
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
       }
 
       const cursorOptions: any = {

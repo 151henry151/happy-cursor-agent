@@ -101,6 +101,7 @@ export class ApiSessionClient extends EventEmitter {
     private pendingOutbox: Array<{ content: string; localId: string }> = [];
     private readonly sendSync: InvalidateSync;
     private readonly receiveSync: InvalidateSync;
+    private receivePollInterval: ReturnType<typeof setInterval> | null = null;
 
     constructor(token: string, session: Session) {
         super()
@@ -152,6 +153,12 @@ export class ApiSessionClient extends EventEmitter {
             logger.debug('Socket connected successfully');
             this.rpcHandlerManager.onSocketConnect(this.socket);
             this.receiveSync.invalidate();
+            // Poll for new messages so we receive them even if socket push is missed (e.g. session-scoped delivery)
+            this.receivePollInterval = setInterval(() => {
+                if (this.socket.connected) {
+                    this.receiveSync.invalidate();
+                }
+            }, 2500);
         })
 
         // Set up global RPC request handler
@@ -161,6 +168,10 @@ export class ApiSessionClient extends EventEmitter {
 
         this.socket.on('disconnect', (reason) => {
             logger.debug('[API] Socket disconnected:', reason);
+            if (this.receivePollInterval) {
+                clearInterval(this.receivePollInterval);
+                this.receivePollInterval = null;
+            }
             this.rpcHandlerManager.onSocketDisconnect();
         })
 
@@ -180,19 +191,55 @@ export class ApiSessionClient extends EventEmitter {
                 }
 
                 if (data.body.t === 'new-message') {
+                    logger.debug('[SOCKET] [UPDATE] Received new-message event', {
+                        sessionId: this.sessionId,
+                        messageSeq: data.body.message?.seq,
+                        lastSeq: this.lastSeq,
+                    });
                     const messageSeq = data.body.message?.seq;
+                    const content = data.body.message?.content;
+                    const isEncrypted = content?.t === 'encrypted';
+                    const isNextSeq = typeof messageSeq === 'number' && messageSeq === this.lastSeq + 1;
+                    if (this.lastSeq === 0 && messageSeq === 1 && isEncrypted) {
+                        // First message: process in place so Cursor/agent gets it immediately
+                        try {
+                            const body = decrypt(this.encryptionKey, this.encryptionVariant, decodeBase64(content.c));
+                            if (body == null) {
+                                logger.debug('[SOCKET] [UPDATE] First message decrypt returned null, invalidating receiveSync');
+                                this.receiveSync.invalidate();
+                                return;
+                            }
+                            logger.debugLargeJson('[SOCKET] [UPDATE] Received update (first message):', body);
+                            this.routeIncomingMessage(body);
+                            this.lastSeq = 1;
+                        } catch (err) {
+                            logger.debug('[SOCKET] [UPDATE] Error processing first message, invalidating receiveSync', { error: err });
+                            this.receiveSync.invalidate();
+                        }
+                        return;
+                    }
                     if (this.lastSeq === 0) {
                         this.receiveSync.invalidate();
                         return;
                     }
-                    if (typeof messageSeq !== 'number' || messageSeq !== this.lastSeq + 1 || data.body.message.content.t !== 'encrypted') {
+                    if (!isNextSeq || !isEncrypted) {
                         this.receiveSync.invalidate();
                         return;
                     }
-                    const body = decrypt(this.encryptionKey, this.encryptionVariant, decodeBase64(data.body.message.content.c));
-                    logger.debugLargeJson('[SOCKET] [UPDATE] Received update:', body)
-                    this.routeIncomingMessage(body);
-                    this.lastSeq = messageSeq;
+                    try {
+                        const body = decrypt(this.encryptionKey, this.encryptionVariant, decodeBase64(content.c));
+                        if (body == null) {
+                            logger.debug('[SOCKET] [UPDATE] new-message decrypt returned null, invalidating receiveSync');
+                            this.receiveSync.invalidate();
+                            return;
+                        }
+                        logger.debugLargeJson('[SOCKET] [UPDATE] Received update:', body);
+                        this.routeIncomingMessage(body);
+                        this.lastSeq = messageSeq;
+                    } catch (err) {
+                        logger.debug('[SOCKET] [UPDATE] Error processing new-message, invalidating receiveSync', { error: err });
+                        this.receiveSync.invalidate();
+                    }
                 } else if (data.body.t === 'update-session') {
                     if (data.body.metadata && data.body.metadata.version > this.metadataVersion) {
                         this.metadata = decrypt(this.encryptionKey, this.encryptionVariant, decodeBase64(data.body.metadata.value));
@@ -243,6 +290,7 @@ export class ApiSessionClient extends EventEmitter {
     private routeIncomingMessage(message: unknown) {
         const userResult = UserMessageSchema.safeParse(message);
         if (userResult.success) {
+            logger.debug('[API] Routed user message to callback/queue', { sessionId: this.sessionId });
             if (this.pendingMessageCallback) {
                 this.pendingMessageCallback(userResult.data);
             } else {
@@ -250,6 +298,10 @@ export class ApiSessionClient extends EventEmitter {
             }
             return;
         }
+        logger.debug('[API] Incoming message did not match UserMessageSchema, emitting as generic message', {
+            sessionId: this.sessionId,
+            parseError: userResult.error?.message,
+        });
         this.emit('message', message);
     }
 
@@ -269,6 +321,12 @@ export class ApiSessionClient extends EventEmitter {
             );
 
             const messages = Array.isArray(response.data.messages) ? response.data.messages : [];
+            logger.debug('[API] fetchMessages response', {
+                sessionId: this.sessionId,
+                afterSeq,
+                count: messages.length,
+                hasMore: !!response.data.hasMore,
+            });
             let maxSeq = afterSeq;
 
             for (const message of messages) {

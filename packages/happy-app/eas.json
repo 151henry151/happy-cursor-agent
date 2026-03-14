@@ -30,6 +30,15 @@
         "APP_ENV": "preview"
       }
     },
+    "promptele": {
+      "autoIncrement": true,
+      "distribution": "internal",
+      "channel": "preview",
+      "env": {
+        "APP_ENV": "preview",
+        "EXPO_PUBLIC_HAPPY_SERVER_URL": "https://p.romptele.com"
+      }
+    },
     "preview-store": {
       "autoIncrement": true,
       "distribution": "store",

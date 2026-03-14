@@ -137,8 +137,11 @@ export interface SpawnSessionOptions {
     machineId: string;
     directory: string;
     approvedNewDirectoryCreation?: boolean;
+    /** Web app user token so the spawned session is created under the same account (avoids 404 on POST messages) */
     token?: string;
-    agent?: 'codex' | 'claude' | 'gemini';
+    /** Web app user secret (legacy encryption key, base64url). Required with token for Cursor so session create uses web user's credentials. */
+    secret?: string;
+    agent?: 'codex' | 'claude' | 'gemini' | 'cursor';
     // Environment variables from AI backend profile
     // Accepts any environment variables - daemon will pass them to the agent process
     // Common variables include:
@@ -159,7 +162,7 @@ export interface SpawnSessionOptions {
  */
 export async function machineSpawnNewSession(options: SpawnSessionOptions): Promise<SpawnSessionResult> {
 
-    const { machineId, directory, approvedNewDirectoryCreation = false, token, agent, environmentVariables } = options;
+    const { machineId, directory, approvedNewDirectoryCreation = false, token, secret, agent, environmentVariables } = options;
 
     try {
         const result = await apiSocket.machineRPC<SpawnSessionResult, {
@@ -167,12 +170,13 @@ export async function machineSpawnNewSession(options: SpawnSessionOptions): Prom
             directory: string
             approvedNewDirectoryCreation?: boolean,
             token?: string,
-            agent?: 'codex' | 'claude' | 'gemini',
+            secret?: string,
+            agent?: 'codex' | 'claude' | 'gemini' | 'cursor',
             environmentVariables?: Record<string, string>;
         }>(
             machineId,
             'spawn-happy-session',
-            { type: 'spawn-in-directory', directory, approvedNewDirectoryCreation, token, agent, environmentVariables }
+            { type: 'spawn-in-directory', directory, approvedNewDirectoryCreation, token, secret, agent, environmentVariables }
         );
         return result;
     } catch (error) {

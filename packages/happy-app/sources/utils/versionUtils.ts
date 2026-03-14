@@ -2,8 +2,8 @@
  * Utility functions for version comparison and validation
  */
 
-// Minimum required CLI version for full compatibility
-export const MINIMUM_CLI_VERSION = '0.10.0';
+// Minimum required CLI version for full compatibility (this fork uses 0.1.x)
+export const MINIMUM_CLI_VERSION = '0.1.0';
 
 /**
  * Compare two semantic version strings

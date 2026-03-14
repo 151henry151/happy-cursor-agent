@@ -150,7 +150,7 @@ export default {
             ]
         ],
         updates: {
-            url: "https://u.expo.dev/4558dd3d-cd5a-47cd-bad9-e591a241cc06",
+            url: "https://u.expo.dev/9cc6ddda-5dc5-4e22-b4b7-c6f619bc9cc9",
             requestHeaders: {
                 "expo-channel-name": "production"
             }
@@ -163,7 +163,7 @@ export default {
                 root: "./sources/app"
             },
             eas: {
-                projectId: "4558dd3d-cd5a-47cd-bad9-e591a241cc06"
+                projectId: "9cc6ddda-5dc5-4e22-b4b7-c6f619bc9cc9"
             },
             app: {
                 postHogKey: process.env.EXPO_PUBLIC_POSTHOG_API_KEY,
@@ -172,6 +172,6 @@ export default {
                 revenueCatStripeKey: process.env.EXPO_PUBLIC_REVENUE_CAT_STRIPE
             }
         },
-        owner: "bulkacorp"
+        // owner removed so EAS uses the account from EXPO_TOKEN
     }
 };

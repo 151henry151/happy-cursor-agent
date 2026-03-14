@@ -14,6 +14,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useHeaderHeight } from '@/utils/responsive';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { machineSpawnNewSession } from '@/sync/ops';
+import { useAuth } from '@/auth/AuthContext';
 import { Modal } from '@/modal';
 import { sync } from '@/sync/sync';
 import { SessionTypeSelector } from '@/components/SessionTypeSelector';
@@ -65,7 +66,7 @@ const useProfileMap = (profiles: AIBackendProfile[]) => {
 
 // Environment variable transformation helper
 // Returns ALL profile environment variables - daemon will use them as-is
-const transformProfileToEnvironmentVars = (profile: AIBackendProfile, agentType: 'claude' | 'codex' | 'gemini' = 'claude') => {
+const transformProfileToEnvironmentVars = (profile: AIBackendProfile, agentType: 'claude' | 'codex' | 'gemini' | 'cursor' = 'cursor') => {
     // getProfileEnvironmentVariables already returns ALL env vars from profile
     // including custom environmentVariables array and provider-specific configs
     return getProfileEnvironmentVariables(profile);
@@ -264,6 +265,7 @@ function NewSessionWizard() {
     const { theme, rt } = useUnistyles();
     const router = useRouter();
     const safeArea = useSafeAreaInsets();
+    const auth = useAuth();
     const { prompt, dataId, machineId: machineIdParam, path: pathParam } = useLocalSearchParams<{
         prompt?: string;
         dataId?: string;
@@ -316,33 +318,33 @@ function NewSessionWizard() {
         }
         return 'anthropic'; // Default to Anthropic
     });
-    const [agentType, setAgentType] = React.useState<'claude' | 'codex' | 'gemini'>(() => {
+    const [agentType, setAgentType] = React.useState<'claude' | 'codex' | 'gemini' | 'cursor'>(() => {
         // Check if agent type was provided in temp data
         if (tempSessionData?.agentType) {
             // Only allow gemini if experiments are enabled
             if (tempSessionData.agentType === 'gemini' && !experimentsEnabled) {
-                return 'claude';
+                return 'cursor';
             }
-            return tempSessionData.agentType;
+            return tempSessionData.agentType as 'claude' | 'codex' | 'gemini' | 'cursor';
         }
-        if (lastUsedAgent === 'claude' || lastUsedAgent === 'codex') {
-            return lastUsedAgent;
+        if (lastUsedAgent === 'cursor' || lastUsedAgent === 'claude' || lastUsedAgent === 'codex') {
+            return lastUsedAgent as 'claude' | 'codex' | 'gemini' | 'cursor';
         }
         // Only allow gemini if experiments are enabled
         if (lastUsedAgent === 'gemini' && experimentsEnabled) {
-            return lastUsedAgent;
+            return 'gemini';
         }
-        return 'claude';
+        return 'cursor';
     });
 
-    // Agent cycling handler (for cycling through claude -> codex -> gemini)
+    // Agent cycling handler (for cycling through cursor -> claude -> codex -> gemini -> cursor)
     // Note: Does NOT persist immediately - persistence is handled by useEffect below
     const handleAgentClick = React.useCallback(() => {
         setAgentType(prev => {
-            // Cycle: claude -> codex -> gemini (if experiments) -> claude
+            if (prev === 'cursor') return 'claude';
             if (prev === 'claude') return 'codex';
-            if (prev === 'codex') return experimentsEnabled ? 'gemini' : 'claude';
-            return 'claude';
+            if (prev === 'codex') return experimentsEnabled ? 'gemini' : 'cursor';
+            return 'cursor';
         });
     }, [experimentsEnabled]);
 
@@ -463,12 +465,13 @@ function NewSessionWizard() {
         const agentAvailable = cliAvailability[agentType];
 
         if (agentAvailable === false) {
-            // Current agent not available - find first available
-            const availableAgent: 'claude' | 'codex' | 'gemini' =
+            // Current agent not available - find first available (cursor is always an option from web)
+            const availableAgent: 'claude' | 'codex' | 'gemini' | 'cursor' =
+                agentType === 'cursor' ? 'cursor' : // cursor not in cliAvailability, keep it
                 cliAvailability.claude === true ? 'claude' :
                 cliAvailability.codex === true ? 'codex' :
                 (cliAvailability.gemini === true && experimentsEnabled) ? 'gemini' :
-                'claude'; // Fallback to claude (will fail at spawn with clear error)
+                'cursor'; // Prefer Cursor for this fork
 
             console.warn(`[AgentSelection] ${agentType} not available, switching to ${availableAgent}`);
             setAgentType(availableAgent);
@@ -1031,15 +1034,20 @@ function NewSessionWizard() {
                 }
             }
 
+            // Pass web app user credentials so the spawned session is created under this account (avoids 404 on POST /messages)
+            const spawnCredentials = auth.credentials ? { token: auth.credentials.token, secret: auth.credentials.secret } : undefined;
+
             const result = await machineSpawnNewSession({
                 machineId: selectedMachineId,
                 directory: actualPath,
                 approvedNewDirectoryCreation: true,
                 agent: agentType,
+                token: spawnCredentials?.token,
+                secret: spawnCredentials?.secret,
                 environmentVariables
             });
 
-            if ('sessionId' in result && result.sessionId) {
+            if (result.type === 'success' && result.sessionId) {
                 // Clear draft state on successful session creation
                 clearNewSessionDraft();
 
@@ -1061,6 +1069,16 @@ function NewSessionWizard() {
                         return 'session'
                     },
                 });
+            } else if (result.type === 'error' && result.errorMessage) {
+                Modal.alert(t('common.error'), result.errorMessage);
+                setIsCreating(false);
+            } else if (result.type === 'requestToApproveDirectoryCreation') {
+                Modal.alert(t('common.error'), `Directory creation required: ${result.directory}. Approve in settings or choose a different path.`);
+                setIsCreating(false);
+            } else if (result && typeof result === 'object' && 'error' in result && typeof (result as { error: string }).error === 'string') {
+                // RPC handler returns { error: "..." } when daemon handler throws (e.g. spawn timeout)
+                Modal.alert(t('common.error'), (result as { error: string }).error);
+                setIsCreating(false);
             } else {
                 throw new Error('Session spawning failed - no session ID returned.');
             }
@@ -1072,12 +1090,18 @@ function NewSessionWizard() {
                     errorMessage = 'Session startup timed out. The machine may be slow or the daemon may not be responding.';
                 } else if (error.message.includes('Socket not connected')) {
                     errorMessage = 'Not connected to server. Check your internet connection.';
+                } else if (error.message.includes('RPC method not available') || error.message.includes('not available')) {
+                    errorMessage = 'No daemon connected for this machine. Refresh the page, then select the machine that shows "online" (the daemon may have reconnected with a new ID).';
+                } else if (error.message.includes('Machine encryption not found')) {
+                    errorMessage = 'This machine is not linked to this browser. Run "yarn cli auth login" again on the machine and complete the browser link, then try again.';
+                } else if (error.message && error.message !== 'RPC call failed') {
+                    errorMessage = error.message;
                 }
             }
             Modal.alert(t('common.error'), errorMessage);
             setIsCreating(false);
         }
-    }, [selectedMachineId, selectedPath, sessionPrompt, sessionType, experimentsEnabled, agentType, selectedProfileId, permissionMode, modelMode, recentMachinePaths, profileMap, router]);
+    }, [auth, selectedMachineId, selectedPath, sessionPrompt, sessionType, experimentsEnabled, agentType, selectedProfileId, permissionMode, modelMode, recentMachinePaths, profileMap, router]);
 
     const screenWidth = useWindowDimensions().width;
 
@@ -1233,6 +1257,14 @@ function NewSessionWizard() {
                                             />
                                             <Text style={{ fontSize: 11, color: connectionStatus.color, ...Typography.default() }}>
                                                 {connectionStatus.text}
+                                            </Text>
+                                        </View>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                            <Text style={{ fontSize: 11, color: theme.colors.text, ...Typography.default() }}>
+                                                {agentType === 'cursor' ? '✓' : '·'}
+                                            </Text>
+                                            <Text style={{ fontSize: 11, color: theme.colors.text, ...Typography.default() }}>
+                                                cursor
                                             </Text>
                                         </View>
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -1915,7 +1947,7 @@ function NewSessionWizard() {
                             autocompletePrefixes={[]}
                             autocompleteSuggestions={async () => []}
                             agentType={agentType}
-                            onAgentClick={handleAgentInputAgentClick}
+                            onAgentClick={handleAgentClick}
                             permissionMode={permissionMode}
                             availableModes={availableModes}
                             onPermissionModeChange={handleAgentInputPermissionChange}

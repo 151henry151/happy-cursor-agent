@@ -313,6 +313,7 @@ class EventRouter {
             return;
         }
 
+        let sentCount = 0;
         for (const connection of connections) {
             // Skip message echo
             if (params.skipSenderConnection && connection === params.skipSenderConnection) {
@@ -325,6 +326,11 @@ class EventRouter {
             }
 
             connection.socket.emit(params.eventName, params.payload);
+            sentCount++;
+        }
+
+        if (params.payload?.body?.t === 'new-message' && params.recipientFilter.type === 'all-interested-in-session') {
+            log({ module: 'websocket' }, `new-message emitted to ${sentCount} connection(s) for session ${params.recipientFilter.sessionId} (user ${params.userId}, total connections: ${connections.size})`);
         }
     }
 }

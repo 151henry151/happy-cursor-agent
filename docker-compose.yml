@@ -1,0 +1,48 @@
+# Happy Cursor Agent - backend (API + Socket.IO) + Postgres + Redis
+# Web app is built and served via host nginx (see docs/deployment.md).
+
+services:
+  happy-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: happy
+      POSTGRES_PASSWORD: happy
+      POSTGRES_DB: happy
+    volumes:
+      - happy-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U happy -d happy"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  happy-redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  happy-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    ports:
+      - "127.0.0.1:3007:3005"
+    environment:
+      PORT: "3005"
+      DATABASE_URL: postgresql://happy:happy@happy-db:5432/happy
+      REDIS_URL: redis://happy-redis:6379
+      HANDY_MASTER_SECRET: ${HANDY_MASTER_SECRET:-change-me-in-production}
+      METRICS_ENABLED: "false"
+      PUBLIC_URL: ${PUBLIC_URL:-https://p.romptele.com}
+    depends_on:
+      happy-db:
+        condition: service_healthy
+      happy-redis:
+        condition: service_healthy
+    command: sh -c "cd /repo/packages/happy-server && npx prisma migrate deploy && yarn start"
+
+volumes:
+  happy-db-data:

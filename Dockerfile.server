@@ -8,6 +8,7 @@ WORKDIR /repo
 
 COPY package.json yarn.lock ./
 COPY scripts ./scripts
+COPY patches ./patches
 
 RUN mkdir -p packages/happy-app packages/happy-server packages/happy-cli packages/happy-wire
 
@@ -31,7 +32,7 @@ COPY packages/happy-wire ./packages/happy-wire
 COPY packages/happy-server ./packages/happy-server
 
 RUN yarn workspace @happy-cursor/wire build
-RUN yarn workspace happy-server build
+RUN yarn workspace happy-cursor-server build
 
 # Stage 3: runtime
 FROM node:20 AS runner

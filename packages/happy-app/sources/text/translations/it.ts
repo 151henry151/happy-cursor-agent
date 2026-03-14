@@ -433,6 +433,7 @@ export const it: TranslationStructure = {
             claude: 'Claude',
             codex: 'Codex',
             gemini: 'Gemini',
+            cursor: 'Cursor',
         },
         model: {
             title: 'MODELLO',
