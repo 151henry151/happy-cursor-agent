@@ -33,6 +33,16 @@ export const initialMachineMetadata: MachineMetadata = {
   happyLibDir: projectPath()
 };
 
+type SpawnAgent = 'claude' | 'codex' | 'gemini' | 'cursor';
+
+export function normalizeSpawnAgent(agent: string | undefined): SpawnAgent {
+  const normalized = typeof agent === 'string' ? agent.trim().toLowerCase() : '';
+  if (normalized === 'codex' || normalized === 'gemini' || normalized === 'cursor') {
+    return normalized;
+  }
+  return 'claude';
+}
+
 // Get environment variables for a profile, filtered for agent compatibility
 async function getProfileEnvironmentVariablesForAgent(
   profileId: string,
@@ -224,6 +234,7 @@ export async function startDaemon(): Promise<void> {
       logger.debugLargeJson('[DAEMON RUN] Spawning session', options);
 
       const { directory, sessionId, machineId, approvedNewDirectoryCreation = true } = options;
+      const normalizedAgent = normalizeSpawnAgent(options.agent);
       let directoryCreated = false;
 
       try {
@@ -279,7 +290,7 @@ export async function startDaemon(): Promise<void> {
         // Layer 1: Resolve authentication token if provided
         const authEnv: Record<string, string> = {};
         if (options.token) {
-          if (options.agent === 'codex') {
+          if (normalizedAgent === 'codex') {
 
             // Create a temporary directory for Codex
             const codexHomeDir = tmp.dirSync();
@@ -289,11 +300,15 @@ export async function startDaemon(): Promise<void> {
 
             // Set the environment variable for Codex
             authEnv.CODEX_HOME = codexHomeDir.name;
-          } else if (options.agent === 'cursor' && options.secret) {
-            // Cursor: pass web app user credentials so the child creates the session under the same account
-            authEnv.HAPPY_SESSION_TOKEN = options.token;
-            authEnv.HAPPY_SESSION_SECRET = options.secret;
-          } else { // Assuming claude
+          } else if (normalizedAgent === 'cursor') {
+            if (options.secret) {
+              // Cursor: pass web app user credentials so the child creates the session under the same account
+              authEnv.HAPPY_SESSION_TOKEN = options.token;
+              authEnv.HAPPY_SESSION_SECRET = options.secret;
+            } else {
+              logger.warn('[DAEMON RUN] Cursor spawn received token without secret; falling back to local CLI credentials');
+            }
+          } else {
             authEnv.CLAUDE_CODE_OAUTH_TOKEN = options.token;
           }
         }
@@ -317,10 +332,10 @@ export async function startDaemon(): Promise<void> {
               // Get profile environment variables filtered for agent compatibility
               profileEnv = await getProfileEnvironmentVariablesForAgent(
                 settings.activeProfileId,
-                options.agent || 'claude'
+                normalizedAgent
               );
 
-              logger.debug(`[DAEMON RUN] Loaded ${Object.keys(profileEnv).length} environment variables from CLI local profile for agent ${options.agent || 'claude'}`);
+              logger.debug(`[DAEMON RUN] Loaded ${Object.keys(profileEnv).length} environment variables from CLI local profile for agent ${normalizedAgent}`);
               logger.debug(`[DAEMON RUN] CLI profile env var keys: ${Object.keys(profileEnv).join(', ')}`);
             } else {
               logger.debug('[DAEMON RUN] No CLI local active profile set');
@@ -395,8 +410,7 @@ export async function startDaemon(): Promise<void> {
           // Construct command for the CLI
           const cliPath = join(projectPath(), 'dist', 'index.mjs');
           // Determine agent command - support claude, codex, and gemini
-          const normalizedAgent = typeof options.agent === 'string' ? options.agent.toLowerCase() : undefined;
-          const agent = normalizedAgent === 'cursor' ? 'cursor' : (normalizedAgent === 'gemini' ? 'gemini' : (normalizedAgent === 'codex' ? 'codex' : 'claude'));
+          const agent = normalizedAgent;
           const fullCommand = `node --no-warnings --no-deprecation ${cliPath} ${agent} --happy-starting-mode remote --started-by daemon`;
 
           // Spawn in tmux with environment variables
@@ -480,7 +494,7 @@ export async function startDaemon(): Promise<void> {
           logger.debug(`[DAEMON RUN] Using regular process spawning`);
 
           // Normalize agent type (wire may send 'Cursor' or 'cursor')
-          const agentType = typeof options.agent === 'string' ? options.agent.toLowerCase() : undefined;
+          const agentType = normalizedAgent;
 
           // Construct arguments for the CLI - support cursor, claude, codex, and gemini
           let agentCommand: string;
@@ -489,7 +503,6 @@ export async function startDaemon(): Promise<void> {
               agentCommand = 'cursor';
               break;
             case 'claude':
-            case undefined:
               agentCommand = 'claude';
               break;
             case 'codex':

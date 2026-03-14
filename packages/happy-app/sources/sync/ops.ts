@@ -155,6 +155,20 @@ export interface SpawnSessionOptions {
     environmentVariables?: Record<string, string>;
 }
 
+function normalizeAgent(agent: SpawnSessionOptions['agent'] | string | undefined): SpawnSessionOptions['agent'] | string | undefined {
+    if (typeof agent !== 'string') {
+        return undefined;
+    }
+
+    const normalized = agent.trim().toLowerCase();
+    if (normalized === 'claude' || normalized === 'codex' || normalized === 'gemini' || normalized === 'cursor') {
+        return normalized;
+    }
+
+    // Preserve unknown values so backend can return an explicit "unsupported agent" error.
+    return agent;
+}
+
 // Exported session operation functions
 
 /**
@@ -163,6 +177,7 @@ export interface SpawnSessionOptions {
 export async function machineSpawnNewSession(options: SpawnSessionOptions): Promise<SpawnSessionResult> {
 
     const { machineId, directory, approvedNewDirectoryCreation = false, token, secret, agent, environmentVariables } = options;
+    const normalizedAgent = normalizeAgent(agent);
 
     try {
         const result = await apiSocket.machineRPC<SpawnSessionResult, {
@@ -171,12 +186,12 @@ export async function machineSpawnNewSession(options: SpawnSessionOptions): Prom
             approvedNewDirectoryCreation?: boolean,
             token?: string,
             secret?: string,
-            agent?: 'codex' | 'claude' | 'gemini' | 'cursor',
+            agent?: 'codex' | 'claude' | 'gemini' | 'cursor' | string,
             environmentVariables?: Record<string, string>;
         }>(
             machineId,
             'spawn-happy-session',
-            { type: 'spawn-in-directory', directory, approvedNewDirectoryCreation, token, secret, agent, environmentVariables }
+            { type: 'spawn-in-directory', directory, approvedNewDirectoryCreation, token, secret, agent: normalizedAgent, environmentVariables }
         );
         return result;
     } catch (error) {
