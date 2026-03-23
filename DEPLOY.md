@@ -1,9 +1,11 @@
 # Happy Cursor Agent - Deploy on this server
 
+This repo is a **git submodule** of [my-webserver-setup](https://github.com/151henry151/my-webserver-setup) at `happy-cursor-agent/` (on romptele: `/home/henry/webserver/happy-cursor-agent`). Clone the parent repo with `git clone --recurse-submodules` or run `git submodule update --init happy-cursor-agent` after clone.
+
 ## 1. Start the backend
 
 ```bash
-cd /home/henry/happy-cursor-agent
+cd /home/henry/webserver/happy-cursor-agent
 docker compose up -d
 ```
 
@@ -15,7 +17,7 @@ Backend is published as **127.0.0.1:3007** → container port `3005` (see `docke
 EXPO_PUBLIC_HAPPY_SERVER_URL=https://your-domain.com ./scripts/build-webapp.sh
 ```
 
-Output is in `webapp-dist/`. Nginx config is in `../webserver/nginx/conf.d/happy-cursor.romptele.com.conf` (disabled until SSL is ready).
+Output is in `webapp-dist/`. Nginx vhost for production is in the parent repo: `../nginx/conf.d/p.romptele.com.conf` (see also `happy-cursor.romptele.com.conf.disabled`).
 
 ## 3. Production
 

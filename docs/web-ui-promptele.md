@@ -6,6 +6,8 @@ The Happy web UI is a **client** that talks to your Happy server. Sessions run o
 
 The Happy CLI and this repo require **Node.js 20 or newer**. Node 18 will fail (e.g. `yarn install` engine errors, or regex `/v` flag syntax errors). Install Node 20 LTS then run the steps below.
 
+On the romptele server, this project lives at **`/home/henry/webserver/happy-cursor-agent`** (submodule of `my-webserver-setup`). Replace `/path/to/happy-cursor-agent` below with that path or your local clone.
+
 ## Why "Please select a machine to start the session"?
 
 A **machine** is a computer that has registered with the server by running the Happy CLI (and optionally the daemon). Until at least one machine is connected, the web UI has nothing to run sessions on, so you must "select a machine" before starting a session.
