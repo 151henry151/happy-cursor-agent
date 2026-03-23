@@ -4,14 +4,15 @@ import * as privacyKit from "privacy-kit";
 import { db } from "@/storage/db";
 import { auth } from "@/app/auth/auth";
 import { log } from "@/utils/log";
+import { b64KeyMaterial, b64ResponsePayload } from "./authZod";
 
 export function authRoutes(app: Fastify) {
     app.post('/v1/auth', {
         schema: {
             body: z.object({
-                publicKey: z.string(),
-                challenge: z.string(),
-                signature: z.string()
+                publicKey: b64KeyMaterial,
+                challenge: b64KeyMaterial,
+                signature: b64KeyMaterial
             })
         }
     }, async (request, reply) => {
@@ -41,7 +42,7 @@ export function authRoutes(app: Fastify) {
     app.post('/v1/auth/request', {
         schema: {
             body: z.object({
-                publicKey: z.string(),
+                publicKey: b64KeyMaterial,
                 supportsV2: z.boolean().nullish()
             }),
             response: {
@@ -90,7 +91,7 @@ export function authRoutes(app: Fastify) {
     app.get('/v1/auth/request/status', {
         schema: {
             querystring: z.object({
-                publicKey: z.string(),
+                publicKey: b64KeyMaterial,
             }),
             response: {
                 200: z.object({
@@ -128,8 +129,8 @@ export function authRoutes(app: Fastify) {
         preHandler: app.authenticate,
         schema: {
             body: z.object({
-                response: z.string(),
-                publicKey: z.string()
+                response: b64ResponsePayload,
+                publicKey: b64KeyMaterial
             })
         }
     }, async (request, reply) => {
@@ -169,7 +170,7 @@ export function authRoutes(app: Fastify) {
     app.post('/v1/auth/account/request', {
         schema: {
             body: z.object({
-                publicKey: z.string(),
+                publicKey: b64KeyMaterial,
             }),
             response: {
                 200: z.union([z.object({
@@ -215,8 +216,8 @@ export function authRoutes(app: Fastify) {
         preHandler: app.authenticate,
         schema: {
             body: z.object({
-                response: z.string(),
-                publicKey: z.string()
+                response: b64ResponsePayload,
+                publicKey: b64KeyMaterial
             })
         }
     }, async (request, reply) => {

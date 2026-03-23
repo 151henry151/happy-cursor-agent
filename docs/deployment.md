@@ -49,6 +49,7 @@ A production Dockerfile is provided at `Dockerfile.server`.
 Key notes:
 - The server defaults to port `3005` (set `PORT` explicitly in container environments).
 - The image includes FFmpeg and Python for media processing.
+- **Host safety:** Root `docker-compose.yml` applies cgroup memory limits (`mem_limit`) and `NODE_OPTIONS=--max-old-space-size=512` on `happy-server` so a leak or traffic spike is less likely to trigger host-wide OOM alongside other services (Jellyfin, MariaDB, Cursor remote, etc.). Tune limits if you need more headroom for legitimate load.
 
 ## Kubernetes manifests
 Example manifests live in `packages/happy-server/deploy`:

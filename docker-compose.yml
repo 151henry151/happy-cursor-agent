@@ -4,6 +4,8 @@
 services:
   happy-db:
     image: postgres:16-alpine
+    mem_limit: 512m
+    pids_limit: 100
     environment:
       POSTGRES_USER: happy
       POSTGRES_PASSWORD: happy
@@ -18,6 +20,8 @@ services:
 
   happy-redis:
     image: redis:7-alpine
+    mem_limit: 128m
+    pids_limit: 50
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -28,10 +32,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.server
+    # Cap RSS so OOM cannot take down the whole host (compose applies cgroup limits).
+    mem_limit: 768m
+    memswap_limit: 768m
+    pids_limit: 512
     ports:
       - "127.0.0.1:3007:3005"
     environment:
       PORT: "3005"
+      # Align V8 heap with cgroup so Node fails in-container instead of ballooning on the host.
+      NODE_OPTIONS: "--max-old-space-size=512"
       DATABASE_URL: postgresql://happy:happy@happy-db:5432/happy
       REDIS_URL: redis://happy-redis:6379
       HANDY_MASTER_SECRET: ${HANDY_MASTER_SECRET:-change-me-in-production}
